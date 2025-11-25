@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Question / Answer / Tools Layout</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    body { background: #f5f5f5; padding: 20px; }
+    .page { max-width: 1200px; margin: 0 auto; }
+    .tile { background: #ffffff; border-radius: 8px; padding: 16px 20px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08); }
+
+    /* Question tile: shorter height, internal scroll, non-sticky */
+    .question-tile { margin-bottom: 12px; position: relative; background: #ffffff; max-height: 260px; overflow-y: auto; }
+    .question-title { font-weight: bold; margin-bottom: 8px; }
+
+    .scores-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9rem; }
+    .scores-table th, .scores-table td { border: 1px solid #ddd; padding: 6px 8px; text-align: center; }
+    .scores-table th { background: #f1f5f9; white-space: nowrap; }
+
+    /* Layout: answers and tools side by side (half width each) */
+    .qa-row { display: flex; gap: 16px; align-items: flex-start; }
+    .answers-container { width: 50%; display: block; }
+    .answer-tile { min-height: 160px; position: relative; margin-bottom: 12px; resize: vertical; overflow: auto; }
+    .answer-tile.drag-over { outline: 2px dashed #42a5f5; outline-offset: 4px; }
+    .answer-label { font-size: 0.9rem; color: #607d8b; margin-bottom: 6px; }
+    .answer-content { min-height: 80px; font-size: 0.9rem; color: #455a64; display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
+    .answer-placeholder { color: #b0bec5; font-style: italic; }
+
+    /* Tools tile: scrollable & sticky in viewport */
+    .tools-tile { width: 50%; min-height: 160px; max-height: calc(100vh - 140px); resize: vertical; overflow: auto; position: sticky; top: 100px; }
+    .tile-header { font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+
+    .tool-button { display: block; width: 100%; margin-bottom: 6px; padding: 8px; border-radius: 6px; border: none; background: #eceff1; cursor: grab; text-align: left; font-size: 0.9rem; touch-action: manipulation; }
+    .tool-button:active { cursor: grabbing; }
+    .tool-button.dragging { opacity: 0.6; }
+    .tools-tile.drag-over { outline: 2px dashed #90a4ae; outline-offset: 4px; }
+
+    .tool-group-1 { background: #fff9c4; }
+    .tool-group-2 { background: #b3e5fc; }
+    .tool-group-3 { background: #f8bbd0; }
+    .tool-group-4 { background: #c8e6c9; }
+    .tool-group-5 { background: #ffe0b2; }
+    .tool-group-6 { background: #e1bee7; }
+    .tool-group-7 { background: #ffccbc; }
+
+    .step-chip { padding: 6px 8px; border-radius: 16px; border: 1px solid #cfd8dc; background: #fafafa; font-size: 0.8rem; white-space: normal; text-align: left; }
+
+    .tip-box { margin: 0 0 16px 0; padding: 10px 14px; background: #e3f2fd; border-left: 4px solid #42a5f5; border-radius: 4px; font-size: 0.9rem; color: #1565c0; }
+
+    .actions-row { margin-top: 16px; display: flex; align-items: center; gap: 12px; }
+    .submit-button { padding: 8px 16px; border-radius: 6px; border: none; background: #42a5f5; color: #fff; font-weight: bold; cursor: pointer; }
+    .submit-button:hover { background: #1e88e5; }
+    .feedback { font-size: 0.9rem; }
+    .feedback.ok { color: #2e7d32; }
+    .feedback.error { color: #c62828; }
+
+    /* Topic selection page */
+    .topic-header { font-size: 1.2rem; font-weight: bold; margin-bottom: 10px; }
+    .filter-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+    .filter-field { display: flex; flex-direction: column; gap: 4px; }
+    .filter-field label { font-size: 0.9rem; color: #455a64; }
+    .filter-field input, .filter-field select { padding: 6px 8px; border-radius: 4px; border: 1px solid #cfd8dc; min-width: 160px; }
+    .topic-list { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+    .topic-card { width: 100%; text-align: left; border-radius: 8px; border: 1px solid #cfd8dc; padding: 10px 12px; background: #fafafa; cursor: pointer; }
+    .topic-card:hover { background: #e3f2fd; border-color: #90caf9; }
+    .topic-title { font-weight: bold; margin-bottom: 4px; }
+    .topic-desc { font-size: 0.9rem; color: #607d8b; }
+
+    @media (max-width: 900px) {
+      .page { padding: 10px; }
+      .qa-row { display: block; }
+      .answers-container, .tools-tile { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <!-- Topic Selection Page -->
+    <div id="topic-page" class="tile" style="margin-bottom:16px;">
+      <div class="topic-header">Choose Topic &amp; Question</div>
+      <div class="filter-row">
+        <div class="filter-field">
+          <label for="participants-input">Number of participants</label>
+          <input type="number" id="participants-input" min="1" max="100" placeholder="e.g., 8" />
+        </div>
+        <div class="filter-field">
+          <label for="topic-filter">Topic chosen by participants</label>
+          <select id="topic-filter">
+            <option value="all">All topics</option>
+            <option value="sorting-search">Sorting &amp; Searching</option>
+          </select>
+        </div>
+      </div>
+      <div class="topic-list">
+        <button class="topic-card" id="topic-question-1">
+          <div class="topic-title">Sorting &amp; Searching – Test Scores</div>
+          <div class="topic-desc">
+            A school maintains a list of students' test scores and wants to sort and search them efficiently using Merge Sort, Bubble Sort, Linear Search, and Binary Search.
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Activity Page (hidden until topic is chosen) -->
+    <div id="activity-page" style="display:none;">
+    <!-- Question Tile (Activity Page) -->
+    <div class="tile question-tile">
+      <div class="question-title" style="display:flex; justify-content:space-between; align-items:center;">Question
+        <div style="display:flex; gap:6px;">
+          <button id="hint-btn" style="padding:4px 10px; font-size:0.8rem; border:none; background:#ffe0b2; color:#e65100; border-radius:4px; cursor:pointer;">Hint</button>
+          <button id="minimize-q" style="padding:4px 10px; font-size:0.8rem; border:none; background:#c5e1a5; color:#33691e; border-radius:4px; cursor:pointer;">Minimize</button>
+        </div>
+      </div>
+      <div id="hint-box" style="display:none; margin-top:10px; padding:10px; background:#fff3e0; border-left:4px solid #ff9800; border-radius:4px; font-size:0.9rem; color:#e65100;">
+        The list of scores can be organized by breaking it into small pieces and putting them back together in order, or by simply comparing neighbors and swapping them until everything is sorted. To find a specific score, you can either check each value one at a time from the start, or—after sorting—keep cutting the search area in half until you reach the score you want. These basic ideas make the overall process easy to understand for a beginner.
+      </div>
+      <div id="question-text" style="transition:max-height 0.3s ease; overflow:hidden;">
+        <strong>Problem Statement</strong><br><br>
+        A school maintains a list of students' test scores for analysis.<br>
+        Given an array <b>scores[]</b> of integers representing the marks scored by students, you must perform the following operations:<br><br>
+        • Sort the scores using <b>Merge Sort</b><br>
+        • Sort the scores using <b>Bubble Sort</b> (for comparison)<br>
+        • Search for a particular student's score using <b>Linear Search</b><br>
+        • Search for a particular student's score using <b>Binary Search</b> (after sorting)<br><br>
+        Your task is to write functions to perform each of these operations and use them to process the given data.<br><br>
+        You have to find the optimal way to solve the problem based on insights from the previous steps.<br><br>
+        <table class="scores-table">
+          <tr>
+            <th>Unique ID</th>
+            <td>qw</td>
+            <td>as</td>
+            <td>es</td>
+            <td>sd</td>
+            <td>fd</td>
+            <td>gg</td>
+            <td>hh</td>
+            <td>jj</td>
+            <td>kk</td>
+            <td>ll</td>
+            <td>zz</td>
+            <td>xx</td>
+            <td>cc</td>
+            <td>vv</td>
+            <td>bb</td>
+            <td>nn</td>
+            <td>mm</td>
+          </tr>
+          <tr>
+            <th>Score (out of 50)</th>
+            <td>23</td>
+            <td>34</td>
+            <td>42</td>
+            <td>43</td>
+            <td>23</td>
+            <td>41</td>
+            <td>31</td>
+            <td>24</td>
+            <td>34</td>
+            <td>31</td>
+            <td>19</td>
+            <td>36</td>
+            <td>38</td>
+            <td>39</td>
+            <td>30</td>
+            <td>26</td>
+            <td>27</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tip above answer boxes -->
+    <div class="tip-box">
+      <strong>Tip:</strong> The answer boxes must be filled in the correct sequence of solving the problem before submitting the answer.
+    </div>
+
+    <!-- Answer Boxes + Tools -->
+    <div class="qa-row">
+      <!-- Answer Boxes -->
+      <div class="answers-container" id="answers-container">
+        <div class="tile answer-tile drop-target" data-index="1">
+          <div class="tile-header">A</div>
+          <div style="position:absolute; top:12px; right:12px; display:flex; gap:6px;">
+            <button class="undo-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ffe082; color:#8d6e63; border-radius:4px; cursor:pointer;">Undo</button>
+            <button class="clear-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ef9a9a; color:#b71c1c; border-radius:4px; cursor:pointer;">Clear</button>
+          </div>
+          <div class="answer-label">Drag options here in the order you would start solving the problem.</div>
+          <div class="answer-content">
+            <span class="answer-placeholder">No steps added yet.</span>
+          </div>
+        </div>
+
+        <div class="tile answer-tile drop-target" data-index="2">
+          <div class="tile-header">B</div>
+          <div style="position:absolute; top:12px; right:12px; display:flex; gap:6px;">
+            <button class="undo-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ffe082; color:#8d6e63; border-radius:4px; cursor:pointer;">Undo</button>
+            <button class="clear-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ef9a9a; color:#b71c1c; border-radius:4px; cursor:pointer;">Clear</button>
+          </div>
+          <div class="answer-label">Drag next logical step(s) here.</div>
+          <div class="answer-content">
+            <span class="answer-placeholder">No steps added yet.</span>
+          </div>
+        </div>
+
+        <div class="tile answer-tile drop-target" data-index="3">
+          <div class="tile-header">C</div>
+          <div style="position:absolute; top:12px; right:12px; display:flex; gap:6px;">
+            <button class="undo-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ffe082; color:#8d6e63; border-radius:4px; cursor:pointer;">Undo</button>
+            <button class="clear-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ef9a9a; color:#b71c1c; border-radius:4px; cursor:pointer;">Clear</button>
+          </div>
+          <div class="answer-label">Continue filling steps in sequence.</div>
+          <div class="answer-content">
+            <span class="answer-placeholder">No steps added yet.</span>
+          </div>
+        </div>
+
+        <div class="tile answer-tile drop-target" data-index="4">
+          <div class="tile-header">D</div>
+          <div style="position:absolute; top:12px; right:12px; display:flex; gap:6px;">
+            <button class="undo-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ffe082; color:#8d6e63; border-radius:4px; cursor:pointer;">Undo</button>
+            <button class="clear-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ef9a9a; color:#b71c1c; border-radius:4px; cursor:pointer;">Clear</button>
+          </div>
+          <div class="answer-label">Add further steps or searches.</div>
+          <div class="answer-content">
+            <span class="answer-placeholder">No steps added yet.</span>
+          </div>
+        </div>
+
+        <div class="tile answer-tile drop-target" data-index="5">
+          <div class="tile-header">E</div>
+          <div style="position:absolute; top:12px; right:12px; display:flex; gap:6px;">
+            <button class="undo-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ffe082; color:#8d6e63; border-radius:4px; cursor:pointer;">Undo</button>
+            <button class="clear-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ef9a9a; color:#b71c1c; border-radius:4px; cursor:pointer;">Clear</button>
+          </div>
+          <div class="answer-label">Use for additional algorithmic steps.</div>
+          <div class="answer-content">
+            <span class="answer-placeholder">No steps added yet.</span>
+          </div>
+        </div>
+
+        <div class="tile answer-tile drop-target" data-index="6">
+          <div class="tile-header">F</div>
+          <div style="position:absolute; top:12px; right:12px; display:flex; gap:6px;">
+            <button class="undo-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ffe082; color:#8d6e63; border-radius:4px; cursor:pointer;">Undo</button>
+            <button class="clear-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ef9a9a; color:#b71c1c; border-radius:4px; cursor:pointer;">Clear</button>
+          </div>
+          <div class="answer-label">Finalize your optimal solution path.</div>
+          <div class="answer-content">
+            <span class="answer-placeholder">No steps added yet.</span>
+          </div>
+        </div>
+
+        <div class="tile answer-tile drop-target" data-index="7">
+          <div class="tile-header">G</div>
+          <div style="position:absolute; top:12px; right:12px; display:flex; gap:6px;">
+            <button class="undo-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ffe082; color:#8d6e63; border-radius:4px; cursor:pointer;">Undo</button>
+            <button class="clear-btn" style="padding:4px 8px; font-size:0.75rem; border:none; background:#ef9a9a; color:#b71c1c; border-radius:4px; cursor:pointer;">Clear</button>
+          </div>
+          <div class="answer-label">Use this box for any final step you think is needed.</div>
+          <div class="answer-content">
+            <span class="answer-placeholder">No steps added yet.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tools Tile -->
+      <div class="tile tools-tile" id="tools-tile">
+        <div class="tile-header">Tools / Step Options (Drag to an Answer Box)</div>
+
+        <!-- Merge Sort related options -->
+        <button class="tool-button" draggable="true">First, split the scores list into two smaller halves to make it easier to work with.</button>
+        <button class="tool-button" draggable="true">Keep breaking the left half into smaller parts until each part has just one score.</button>
+        <button class="tool-button" draggable="true">Do the same for the right half, breaking it into tiny parts until each part is just one score.</button>
+        <button class="tool-button" draggable="true">Then start joining two small parts back together by always choosing the smaller score first.</button>
+        <button class="tool-button" draggable="true">Keep joining parts until the entire list is rebuilt in correct sorted order.</button>
+        <button class="tool-button" draggable="true">Output after Merge Sort: A neatly arranged list of scores from smallest to largest.</button>
+
+        <!-- Bubble Sort related options -->
+        <button class="tool-button" draggable="true">Start at the beginning of the list and look at two neighbors at a time.</button>
+        <button class="tool-button" draggable="true">If the first score is bigger than the next, swap them to fix the order.</button>
+        <button class="tool-button" draggable="true">Continue moving through the list, swapping whenever things are out of order.</button>
+        <button class="tool-button" draggable="true">Repeat these passes until a full pass has no swaps, meaning the list is sorted.</button>
+        <button class="tool-button" draggable="true">Output after Bubble Sort: A sorted list of scores, correct but obtained through many slow passes.</button>
+
+        <!-- Linear Search related options -->
+        <button class="tool-button" draggable="true">Begin from the first score and check each one one-by-one.</button>
+        <button class="tool-button" draggable="true">Compare each score with the score you want to find.</button>
+        <button class="tool-button" draggable="true">If a match appears, stop immediately and return that index.</button>
+        <button class="tool-button" draggable="true">If the list ends and the score never appears, report that it is not found.</button>
+        <button class="tool-button" draggable="true">Output after Linear Search: The location where the score first appears, or a message saying it isn’t present.</button>
+        <button class="tool-button" draggable="true">use linear search to search through unique ID</button>
+
+        <!-- Binary Search related options -->
+        <button class="tool-button" draggable="true">Start with the sorted scores list and set pointers at the start and end.</button>
+        <button class="tool-button" draggable="true">Check the middle score and compare it with the score you’re searching for.</button>
+        <button class="tool-button" draggable="true">If the middle is the same, you’ve found the answer.</button>
+        <button class="tool-button" draggable="true">If the target is smaller, keep searching only in the left side.</button>
+        <button class="tool-button" draggable="true">If the target is bigger, keep searching only in the right side.</button>
+        <button class="tool-button" draggable="true">Output after Binary Search: The position of the score you are searching for, or a message if it’s not there.</button>
+      </div>
+    </div>
+
+    <!-- Submit / Check Answers -->
+    <div class="actions-row">
+      <button class="submit-button" id="submit-btn">Submit</button>
+      <button class="submit-button" id="color-toggle-btn" style="background:#8e24aa; opacity:0.5; cursor:not-allowed;" disabled>Show Tool Colors</button>
+      <div class="feedback" id="feedback"></div>
+    </div>
+  </div> <!-- end of activity-page -->
+  </div>
+
+  <script>
+    const toolsTile = document.getElementById('tools-tile');
+    const answerTiles = document.querySelectorAll('.answer-tile.drop-target');
+    const submitBtn = document.getElementById('submit-btn');
+    const feedback = document.getElementById('feedback');
+
+    let draggedButton = null;          // for mouse/desktop drag
+    const activeTouches = new Map();   // for multi-touch drag (touchId -> { button, overTile })
+
+    // Utility: find answer tile under a given point
+    function getAnswerTileFromPoint(x, y) {
+      const el = document.elementFromPoint(x, y);
+      if (!el) return null;
+      return el.closest('.answer-tile.drop-target');
+    }
+
+    // --- Mouse-based Drag from Tools Panel (desktop) ---
+    toolsTile.addEventListener('dragstart', (e) => {
+      const target = e.target;
+      if (target.classList.contains('tool-button')) {
+        draggedButton = target;
+        target.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'copy';
+        const rawText = target.dataset.stepText || target.innerText.trim();
+        e.dataTransfer.setData('text/plain', rawText);
+      }
+    });
+
+    toolsTile.addEventListener('dragend', () => {
+      if (draggedButton) {
+        draggedButton.classList.remove('dragging');
+        draggedButton = null;
+      }
+      toolsTile.classList.remove('drag-over');
+      answerTiles.forEach((tile) => tile.classList.remove('drag-over'));
+    });
+
+    // --- Answer box drag targets (mouse/desktop) ---
+    answerTiles.forEach((tile) => {
+      tile.addEventListener('dragover', (e) => {
+        if (!draggedButton) return;
+        e.preventDefault();
+        tile.classList.add('drag-over');
+      });
+
+      tile.addEventListener('dragleave', (e) => {
+        if (!tile.contains(e.relatedTarget)) {
+          tile.classList.remove('drag-over');
+        }
+      });
+
+      tile.addEventListener('drop', (e) => {
+        if (!draggedButton) return;
+        e.preventDefault();
+        tile.classList.remove('drag-over');
+
+        const stepText = (e.dataTransfer.getData('text/plain') || draggedButton.innerText || '').trim();
+        if (!stepText) return;
+
+        addStepToAnswerBox(tile, stepText);
+      });
+    });
+
+    function addStepToAnswerBox(tile, stepText) {
+      const contentDiv = tile.querySelector('.answer-content');
+
+      // Remove placeholder if present
+      const placeholder = contentDiv.querySelector('.answer-placeholder');
+      if (placeholder) {
+        placeholder.remove();
+      }
+
+      const chip = document.createElement('div');
+      chip.className = 'step-chip';
+      chip.textContent = stepText;
+      contentDiv.appendChild(chip);
+
+      tile.dataset.filled = 'true';
+    }
+
+    // --- Touch support for mobile / multi-touch devices ---
+    let toolButtons = Array.from(document.querySelectorAll('.tool-button'));
+
+    // randomize order of tools
+    const shuffledTools = [...toolButtons];
+    for (let i = shuffledTools.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledTools[i], shuffledTools[j]] = [shuffledTools[j], shuffledTools[i]];
+    }
+    // re-append in shuffled order
+    shuffledTools.forEach((btn) => toolsTile.appendChild(btn));
+
+    // preserve original text for validation
+    shuffledTools.forEach((btn) => {
+      const original = btn.textContent.trim();
+      btn.dataset.stepText = original;
+    });
+
+    // reuse reference after shuffle
+    toolButtons = shuffledTools;
+
+    toolButtons.forEach((btn) => {
+      btn.addEventListener('touchstart', (e) => {
+        // Allow multiple independent drags on a multitouch surface
+        for (const touch of Array.from(e.changedTouches)) {
+          const id = touch.identifier;
+          // Start a drag session for this touch on this button
+          activeTouches.set(id, { button: btn, overTile: null });
+        }
+        btn.classList.add('dragging');
+      }, { passive: true });
+
+      btn.addEventListener('touchmove', (e) => {
+        for (const touch of Array.from(e.changedTouches)) {
+          const id = touch.identifier;
+          const session = activeTouches.get(id);
+          if (!session || session.button !== btn) continue;
+
+          const tile = getAnswerTileFromPoint(touch.clientX, touch.clientY);
+
+          // Clear previous highlight for this touch
+          if (session.overTile && session.overTile !== tile) {
+            session.overTile.classList.remove('drag-over');
+          }
+
+          if (tile) {
+            tile.classList.add('drag-over');
+          }
+
+          session.overTile = tile;
+          activeTouches.set(id, session);
+        }
+      }, { passive: true });
+
+      function endTouchForEvent(e) {
+        for (const touch of Array.from(e.changedTouches)) {
+          const id = touch.identifier;
+          const session = activeTouches.get(id);
+          if (!session || session.button !== btn) continue;
+
+          if (session.overTile) {
+            session.overTile.classList.remove('drag-over');
+            const stepText = session.button.dataset.stepText || session.button.innerText.trim();
+            if (stepText) {
+              addStepToAnswerBox(session.overTile, stepText);
+            }
+          }
+
+          activeTouches.delete(id);
+        }
+
+        // If no active touches are using this button anymore, remove dragging style
+        const stillUsing = Array.from(activeTouches.values()).some((s) => s.button === btn);
+        if (!stillUsing) {
+          btn.classList.remove('dragging');
+        }
+      }
+
+      btn.addEventListener('touchend', (e) => {
+        endTouchForEvent(e);
+      });
+
+      btn.addEventListener('touchcancel', (e) => {
+        endTouchForEvent(e);
+      });
+    });
+
+    // --- Undo and Clear functionality ---
+    document.querySelectorAll('.undo-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const tile = e.target.closest('.answer-tile');
+        const content = tile.querySelector('.answer-content');
+        const chips = content.querySelectorAll('.step-chip');
+        if (chips.length > 0) {
+          chips[chips.length - 1].remove();
+        }
+        if (content.querySelectorAll('.step-chip').length === 0) {
+          tile.dataset.filled = '';
+          content.innerHTML = '<span class="answer-placeholder">No steps added yet.</span>';
+        }
+      });
+    });
+
+    document.querySelectorAll('.clear-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const tile = e.target.closest('.answer-tile');
+        const content = tile.querySelector('.answer-content');
+        content.innerHTML = '<span class="answer-placeholder">No steps added yet.</span>';
+        tile.dataset.filled = '';
+      });
+    });
+
+    // --- Correct Answers for Validation ---
+    const correctAnswers = {
+      1: [
+        'First, split the scores list into two smaller halves to make it easier to work with.',
+        'Keep breaking the left half into smaller parts until each part has just one score.',
+        'Do the same for the right half, breaking it into tiny parts until each part is just one score.',
+        'Then start joining two small parts back together by always choosing the smaller score first.',
+        'Keep joining parts until the entire list is rebuilt in correct sorted order.',
+        'Output after Merge Sort: A neatly arranged list of scores from smallest to largest.'
+      ],
+      2: [
+        'Start at the beginning of the list and look at two neighbors at a time.',
+        'If the first score is bigger than the next, swap them to fix the order.',
+        'Continue moving through the list, swapping whenever things are out of order.',
+        'Repeat these passes until a full pass has no swaps, meaning the list is sorted.',
+        'Output after Bubble Sort: A sorted list of scores, correct but obtained through many slow passes.'
+      ],
+      3: [
+        'Begin from the first score and check each one one-by-one.',
+        'Compare each score with the score you want to find.',
+        'If a match appears, stop immediately and return that index.',
+        'If the list ends and the score never appears, report that it is not found.',
+        'Output after Linear Search: The location where the score first appears, or a message saying it isn’t present.'
+      ],
+      4: [
+        'Start with the sorted scores list and set pointers at the start and end.',
+        'Check the middle score and compare it with the score you’re searching for.',
+        'If the middle is the same, you’ve found the answer.',
+        'If the target is smaller, keep searching only in the left side.',
+        'If the target is bigger, keep searching only in the right side.',
+        'Output after Binary Search: The position of the score you are searching for, or a message if it’s not there.'
+      ],
+      5: [
+        'First, split the scores list into two smaller halves to make it easier to work with.',
+        'Keep breaking the left half into smaller parts until each part has just one score.',
+        'Do the same for the right half, breaking it into tiny parts until each part is just one score.',
+        'Then start joining two small parts back together by always choosing the smaller score first.',
+        'Keep joining parts until the entire list is rebuilt in correct sorted order.',
+        'Output after Merge Sort: A neatly arranged list of scores from smallest to largest.'
+      ],
+      6: [
+        'Start with the sorted scores list and set pointers at the start and end.',
+        'Check the middle score and compare it with the score you’re searching for.',
+        'If the middle is the same, you’ve found the answer.',
+        'If the target is smaller, keep searching only in the left side.',
+        'If the target is bigger, keep searching only in the right side.',
+        'Output after Binary Search: The position of the score you are searching for, or a message if it’s not there.'
+      ],
+      7: [
+        'use linear search to search through unique ID'
+      ]
+    };
+
+    // --- Highlight tools by answer groups ---
+    function highlightToolsByGroup() {
+      const textToGroups = new Map();
+      Object.keys(correctAnswers).forEach((boxIndex) => {
+        const steps = correctAnswers[boxIndex];
+        steps.forEach((text) => {
+          const key = text.trim();
+          if (!textToGroups.has(key)) textToGroups.set(key, []);
+          textToGroups.get(key).push(parseInt(boxIndex, 10));
+        });
+      });
+
+      const buttons = document.querySelectorAll('.tool-button');
+      buttons.forEach((btn) => {
+        const raw = (btn.dataset.stepText || btn.textContent).trim();
+        const groups = textToGroups.get(raw);
+        if (groups && groups.length > 0) {
+          const g = groups[0];
+          btn.classList.add('tool-group-' + g);
+        }
+      });
+    }
+
+    function clearToolColors() {
+      const buttons = document.querySelectorAll('.tool-button');
+      buttons.forEach((btn) => {
+        btn.classList.remove('tool-group-1', 'tool-group-2', 'tool-group-3', 'tool-group-4', 'tool-group-5', 'tool-group-6', 'tool-group-7');
+      });
+    }
+
+    function allToolsUsed() {
+      const buttons = Array.from(document.querySelectorAll('.tool-button'));
+      const chips = Array.from(document.querySelectorAll('.step-chip'));
+      const chipTexts = chips.map((c) => c.textContent.trim());
+      return buttons.every((btn) => {
+        const raw = (btn.dataset.stepText || btn.textContent).trim();
+        return chipTexts.includes(raw);
+      });
+    }
+
+    let toolColorsOn = false;
+    let wrongFullSubmissions = 0;
+    const colorToggleBtn = document.getElementById('color-toggle-btn');
+
+    colorToggleBtn.addEventListener('click', () => {
+      if (!toolColorsOn) {
+        highlightToolsByGroup();
+        toolColorsOn = true;
+        colorToggleBtn.textContent = 'Hide Tool Colors';
+      } else {
+        clearToolColors();
+        toolColorsOn = false;
+        colorToggleBtn.textContent = 'Show Tool Colors';
+      }
+    });
+
+    // --- Submit Validation ---
+    submitBtn.addEventListener('click', () => {
+      let allCorrect = true;
+      let allFilled = true;
+
+      answerTiles.forEach((tile) => {
+        const index = tile.dataset.index;
+        const content = Array.from(tile.querySelectorAll('.step-chip')).map((c) => c.textContent.trim());
+
+        if (content.length === 0) allFilled = false;
+
+        const correct = correctAnswers[index] || [];
+        if (JSON.stringify(content) !== JSON.stringify(correct)) {
+          allCorrect = false;
+        }
+      });
+
+      if (!allFilled) {
+        feedback.textContent = 'Some answer boxes are still empty. Fill each box in sequence before submitting your answer.';
+        feedback.className = 'feedback error';
+        return;
+      }
+
+      if (allCorrect) {
+        feedback.textContent = 'Perfect! All answers are correct and in order.';
+        feedback.className = 'feedback ok';
+      } else {
+        wrongFullSubmissions++;
+
+        if (!toolColorsOn && colorToggleBtn.disabled && wrongFullSubmissions >= 2 && allToolsUsed()) {
+          // unlock the color hint button after two incorrect full attempts using all tools
+          colorToggleBtn.disabled = false;
+          colorToggleBtn.style.opacity = '1';
+          colorToggleBtn.style.cursor = 'pointer';
+          feedback.textContent = 'Some steps are incorrect or out of order. Hint unlocked: you can now use "Show Tool Colors" to see which tools belong together.';
+        } else {
+          feedback.textContent = 'Some steps are incorrect or out of order. Please review and try again.';
+        }
+        feedback.className = 'feedback error';
+      }
+    });
+
+    // --- Topic page navigation ---
+    const topicPage = document.getElementById('topic-page');
+    const activityPage = document.getElementById('activity-page');
+    const topicQuestion1 = document.getElementById('topic-question-1');
+
+    if (topicQuestion1) {
+      topicQuestion1.addEventListener('click', () => {
+        topicPage.style.display = 'none';
+        activityPage.style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+
+    // --- Question minimize toggle ---
+    const qBox = document.getElementById('question-text');
+    const minBtn = document.getElementById('minimize-q');
+    let qMin = false;
+
+    minBtn.addEventListener('click', () => {
+      qMin = !qMin;
+      if (qMin) {
+        qBox.style.maxHeight = '0px';
+        minBtn.textContent = 'Expand';
+      } else {
+        qBox.style.maxHeight = '500px';
+        minBtn.textContent = 'Minimize';
+      }
+    });
+
+    // --- Hint toggle ---
+    const hintBtn = document.getElementById('hint-btn');
+    const hintBox = document.getElementById('hint-box');
+
+    hintBtn.addEventListener('click', () => {
+      if (hintBox.style.display === 'none') {
+        hintBox.style.display = 'block';
+      } else {
+        hintBox.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>
